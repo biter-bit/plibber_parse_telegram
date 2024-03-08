@@ -173,10 +173,10 @@ poetry.toml
 # LSP config files
 pyrightconfig.json
 
-data/*
-photo
-photo/*
-session
-session/*
+channel_name_parse/data/*
+channel_name_parse/photo
+channel_name_parse/photo/*
+channel_name_parse/session
+channel_name_parse/session/*
 
 # End of https://www.toptal.com/developers/gitignore/api/python
