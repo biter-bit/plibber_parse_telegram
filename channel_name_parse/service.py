@@ -1,5 +1,6 @@
 import logging
 from PIL import Image
+from PIL import UnidentifiedImageError
 from io import BytesIO
 
 
@@ -32,11 +33,15 @@ def get_list_channels(start_idx, finish_idx, count_workers, count_process, num_w
 
 
 def compress_image(path):
-    img = Image.open(path)
-    img = img.convert('RGB')
+    try:
+        img = Image.open(path)
+    except UnidentifiedImageError:
+        print('Bad format file')
+    else:
+        img = img.convert('RGB')
 
-    # Сжимаем изображение
-    img_io = BytesIO()
-    img.save(img_io, format='JPEG', quality=100)
-    img_io.seek(0)
-    return img_io
+        # Сжимаем изображение
+        img_io = BytesIO()
+        img.save(img_io, format='JPEG', quality=100)
+        img_io.seek(0)
+        return img_io

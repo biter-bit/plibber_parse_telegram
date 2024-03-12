@@ -216,7 +216,7 @@ def main_checker(api_id, api_hash):
     checker_proxy = ProxyChecker(
         'data/proxies.txt',
         'data/work_proxy.txt',
-        'data/not_work_proxy'
+        'data/not_work_proxy.txt'
     )
     work_proxy = checker_proxy.main_checker_proxy()
     os.environ['PROXIES'] = checker_proxy.convert_to_str(work_proxy)
