@@ -19,22 +19,26 @@ import asyncio
 import hashlib, os
 
 
-def solve_with_2captcha(self, sitekey, url):
+def solve_with_2captcha(sitekey, driver):
     # start the 2CAPTCHA instance
-    captcha2_api_key = "a9d9efc29df98897ce9df737b29f0e80"
+    captcha2_api_key = os.getenv("API_KEY_CAPTCHA")
     solver = TwoCaptcha(captcha2_api_key)
 
     try:
+        # Solve the Captcha
+        result = solver.recaptcha(sitekey=sitekey, url=driver.current_url)
+        code = result['code']
 
-        # resolve the CAPTCHA
-        result = solver.recaptcha(sitekey=sitekey, url=url)
+        # Set the solved Captcha
+        elem_hidden = driver.find_element(By.CSS_SELECTOR, '#g-recaptcha-response')
+        driver.execute_script("arguments[0].style.display = 'block';", elem_hidden)
+        elem_hidden.send_keys(code)
 
-        if result:
-            print(f"Solved: {result}")
-            return result["code"]
-        else:
-            print("CAPTCHA solving failed")
-            return None
+        # Submit the form
+        driver.execute_script('onloadCallback()')
+        # submit_btn = driver.find_element(By.CSS_SELECTOR, 'span[role="checkbox"]')
+        # submit_btn.click()
+        return 'Ok'
 
     except Exception as e:
         print(e)
@@ -58,6 +62,7 @@ class TgstatSpider(scrapy.Spider):
         self.category_list = category_list
         self.s3 = s3
         self.db = db
+        self.count_category = 0
 
     def start_requests(self):
         url = "https://tgstat.ru/en/login"
@@ -98,21 +103,29 @@ class TgstatSpider(scrapy.Spider):
 
     def category_parse(self, response: HtmlResponse, cookie: dict):
         # links_category = response.xpath('//a[starts-with(@href, "/en/") and @class="text-dark"]')
-        for link in self.category_list:
-            if link.split('/')[-1] != "courses":
-                continue
-            yield SeleniumRequest(
-                url=f'{self.url_start}/{link.split("/")[-1]}',
-                callback=self.parse_channels,
-                cookies=cookie,
-                cb_kwargs={"cookie": cookie},
-                wait_time=10,
-                wait_until=EC.element_to_be_clickable(
-                    (By.XPATH, "//button[@class='btn btn-light border lm-button py-1 min-width-220px']"))
-                )
+        # for link in self.category_list:
+        #     if link.split('/')[-1] != "courses":
+        #         self.count_category = self.count_category + 1
+        #         continue
+
+        yield SeleniumRequest(
+            url=f'{self.url_start}/{self.category_list[self.count_category].split("/")[-1]}',
+            callback=self.parse_channels,
+            cookies=cookie,
+            cb_kwargs={"cookie": cookie},
+            wait_time=10,
+            wait_until=EC.element_to_be_clickable(
+                (By.XPATH, "//button[@class='btn btn-light border lm-button py-1 min-width-220px']"))
+            )
 
     async def parse_channels(self, response: HtmlResponse, cookie: dict):
         driver = response.request.meta['driver']
+        if 'Suspicion of a robot - 429' in response.text:
+            # specify reCAPTCHA sitekey, replace with the target site key
+            sitekey_match = re.search(r"'sitekey': '([^']+)'", response.text)
+
+            # call the CAPTCHA solving function
+            captcha_solved = solve_with_2captcha(sitekey_match.group(1), driver)
         while True:
             try:
                 button = driver.find_element(By.XPATH, "//*[@class='btn btn-light border lm-button py-1 min-width-220px']")
@@ -130,6 +143,15 @@ class TgstatSpider(scrapy.Spider):
         names_channel = selector.xpath(
             '//div[@class="card card-body peer-item-box py-2 mb-2 mb-sm-3 border border-info-hover position-relative"]/a[@class="text-body"]'
         )
+
+        self.count_category = self.count_category + 1
+        if len(self.category_list) > self.count_category:
+            yield SeleniumRequest(
+                url=f'{self.url_start}/{self.category_list[self.count_category].split("/")[-1]}',
+                callback=self.parse_channels,
+                cookies=cookie,
+                cb_kwargs={"cookie": cookie}
+            )
 
         for channel in names_channel:
             parse_channel_name = channel.attrib.get("href").split('/')[-1]
@@ -161,12 +183,9 @@ class TgstatSpider(scrapy.Spider):
                     channel_info=channel,
                     messages=messages_result,
                 )
-            # else:
-            #     item = ChannelNameParseItem(
-            #         _id=sha256(channel.attrib.get("href").encode('utf-8')).hexdigest(),
-            #         name_channel=parse_channel_name
-            #     )
                 yield item
+            else:
+                print("Имя без '@'")
 
     def check_file_exists(self, bucket_name, file_path):
         try:
@@ -177,39 +196,3 @@ class TgstatSpider(scrapy.Spider):
                 return False  # Файл не существует
             else:
                 raise  # Обработка других ошибок
-
-    #     if 'Suspicion of a robot - 429' in response.text:
-    #         # specify reCAPTCHA sitekey, replace with the target site key
-    #         captcha_sitekey = "6Lfk3OwlAAAAAKo6NT-lEQzEdc0Bs5N84IBx56lm"
-    #
-    #         # call the CAPTCHA solving function
-    #         captcha_solved = self.solve_with_2captcha(captcha_sitekey, response.url)
-    #
-    #         # check if CAPTCHA is solved and proceed with scraping
-    #         if captcha_solved:
-    #             print("CAPTCHA solved successfully")
-    #
-    #             # extract elements after solving CAPTCHA successfully
-    #             element = response.css("title::text").get()
-    #             print("Scraped element:", element)
-        # if response_json.get("status") == 'restricted':
-        #     # captcha_sitekey = "6Lfk3OwlAAAAAKo6NT-lEQzEdc0Bs5N84IBx56lm"
-        #     captcha_sitekey = "6LfD3PIbAAAAAJs_eEHvoOl75_83eXSqpPSRFJ_u"
-        #     captcha_solved = self.solve_with_2captcha(captcha_sitekey, 'https://2captcha.com/demo/recaptcha-v2-callback')
-        #     if captcha_solved:
-        #         print("CAPTCHA solved successfully")
-        #         element = response.css("title::text").get()
-        #         print("Scraped element:", element)
-
-    # def country_parse(self, response: HtmlResponse, cookie: dict):
-    #     links_country = response.xpath(
-    #         '//div[@class="col-6"]/a[@class="dropdown-item d-block active" and @href="//tgstat.ru/en"]'
-    #     )
-    #     href = links_country[0].xpath('@href').get()
-    #     # self.link_country.add(href)
-    #     yield response.follow(
-    #         href,
-    #         callback=self.category_parse,
-    #         cookies=cookie,
-    #         cb_kwargs={"cookie": cookie}
-    #     )

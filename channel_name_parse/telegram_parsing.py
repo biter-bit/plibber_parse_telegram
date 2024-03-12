@@ -22,6 +22,10 @@ async def download_image(message: dict, checksum_name_file: str, client, s3) -> 
 
     file_name = f'{checksum_name_file}'
     photo_byte = await client.download_media(message, file_name)
+    if photo_byte.split('.')[1] == 'mp4':
+        for name in glob.glob(f'{file_name}.*'):
+            os.remove(name)
+        return ''
     await asyncio.sleep(0.1)
 
     # сжимаем изображение
@@ -116,9 +120,14 @@ async def get_messages(channel: str, client: object) -> list:
                 post_message['id_channel'] = message.chat.id
                 post_message['text'] = message.message
                 post_message['average_coverage'] = message.views
-                post_message['reactions'] = [
-                        (reaction.reaction.emoticon, reaction.count) for reaction in message.reactions.results if reaction
-                ] if message.reactions else None
+                post_message['reactions'] = []
+                if message.reactions:
+                    for reaction in message.reactions.results:
+                        if reaction:
+                            try:
+                                post_message['reactions'].append((reaction.reaction.emoticon, reaction.count))
+                            except AttributeError as e:
+                                post_message['reactions'].append((None, None))
                 post_message['count_comments'] = message.replies.replies if message.replies else None
                 post_message['date'] = message.date.strftime('%Y-%m-%d %H:%M:%S')
 
@@ -131,7 +140,7 @@ async def get_messages(channel: str, client: object) -> list:
                     if message.document and 'application' in message.document.mime_type else None
                 result_messages.append(post_message)
             print(f'{len(result_messages)}')
-            break
+            # break
         return result_messages
     except ValueError as e:
         print("Канал не найден:", e)
