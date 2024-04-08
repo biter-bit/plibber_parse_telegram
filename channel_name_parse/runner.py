@@ -21,8 +21,9 @@ def start_worker_parser(
     # Запускаем главную корутину (клиент)
     process = CrawlerProcess(settings=get_project_settings())
     for num_worker in range(num_process*count_workers, num_process*count_workers+count_workers):
+
+        # берем прокси для данного паука и приводим его к нужному формату
         proxy_data = re.split(r'[:@]', work_proxys[num_worker])
-        # proxy_data = re.split(r'[:@]', random.choice(work_proxys))
         proxy = {
             'proxy_type': 'http',
             'addr': proxy_data[2],
@@ -32,23 +33,20 @@ def start_worker_parser(
             'rdns': True
         }
 
+        # доб. кастомную настройку для паука
         custom_settings_group = {
-            # 'CONCURRENT_REQUESTS': 3,
-            # 'DOWNLOAD_DELAY': 1.5,
             'ROTATING_PROXY_LIST': [work_proxys[num_worker]],
-            # 'API_ID_TELEGRAM': api_id,
-            # 'API_HASH_TELEGRAM': api_hash,
-            # 'PROXY_TELEGRAM': proxy,
-            # 'PATH_ACCOUNT_TELEGRAM': work_proxys[num_worker]
-            # 'CLOSESPIDER_PAGECOUNT': 1
         }
         spider = TgstatSpider
         spider.custom_settings = custom_settings_group
         spider.settings = get_project_settings().copy()
         spider.settings.update(custom_settings_group)
 
+        # индекс начала и конца категорий, с которыми должен работать паук
         start_ind_category = num_worker*categories_for_everyone
         end_ind_category = num_worker*categories_for_everyone+categories_for_everyone
+
+        # запуск паука
         process.crawl(
             spider, work_accounts[num_worker], api_id, api_hash, proxy,
             groups_tgstat_links[start_ind_category:end_ind_category], s3, db
@@ -62,13 +60,20 @@ def start_process_parser(
 ):
     """Запускает процессы парсера"""
 
+    # список всех процессов
     processes = []
 
     # запуск процессов
     for num_process in range(0, count_process):
         print(f"Запуск процесса № {num_process + 1}...")
+
+        # добавляем общее кол-во запущенных пауков в переменную
         workers_count = count_workers*count_process
+
+        # добавляем кол-во групп для каждого паука
         categories_for_everyone = math.ceil(count_groups_tgstat/workers_count)
+
+        # создаем обьект процесса
         process = multiprocessing.Process(target=start_worker_parser,
                                           args=(
                                               num_process,
@@ -80,9 +85,14 @@ def start_process_parser(
                                               categories_for_everyone,
                                               groups_tgstat_links
                                           ))
+
+        # добавляем обьект в список процессов
         processes.append(process)
+
+        # запускаем процесс
         process.start()
 
+    # ожидаем завершения каждого процесса
     for process in processes:
         process.join()
 
@@ -90,17 +100,18 @@ def start_process_parser(
 
 
 def run():
+    # загружаем переменные окружения из .env
     dotenv.load_dotenv()
 
     # добавляем настройки логгера и выводим первый лог
     logger = create_logger('parse_telegram')
     logger.info("Starting telegram parsing")
 
-    # добавляем настройки подключения (id, hash, session, proxy)
+    # добавляем настройки подключения telegram (api_id, api_hash)
     api_id = int(os.getenv('API_ID'))
     api_hash = os.getenv('API_HASH')
 
-    # добавляем кол-во процессов и воркеров
+    # добавляем кол-во процессов и воркеров в переменные
     count_process = int(os.getenv('COUNT_PROCESS'))
     count_workers = int(os.getenv('COUNT_WORKERS'))
 
@@ -111,13 +122,15 @@ def run():
         print("Прокси и аккаунты не проверены, так как настройка выключена")
         raise ErrorCheckNotTrue
 
-    # добавляем кол-во рабочих прокси и аккаунтов
+    # добавляем кол-во рабочих прокси и аккаунтов в переменные
     count_proxys = len(work_proxy)
     count_accounts = len(work_accounts)
 
     # получаем обьекты категорий в tgstat + кол-во этих категорий
     headers = {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/50.0.2661.102 Safari/537.36'}
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_5) AppleWebKit/537.36 (KHTML, like Gecko) '
+                      'Chrome/50.0.2661.102 Safari/537.36'
+    }
     response = requests.get('https://tgstat.ru/en', timeout=10, headers=headers)
     html = response.text
     soup = BeautifulSoup(html, 'html.parser')
@@ -125,6 +138,7 @@ def run():
     groups_tgstat_links = {path.get("href") for path in groups_tgstat}
     count_groups_tgstat = len(groups_tgstat_links)
 
+    # проверки выставленных настроек перед запуском
     if count_accounts < count_process * count_workers:
         raise Exception("Недостаточно аккаунтов для данного кол-ва процессов")
     if count_proxys < count_process * count_workers:
@@ -162,4 +176,6 @@ if __name__ == '__main__':
         aws_secret_access_key='1HUe80GXLnQ2uxXEg6ijz5D6JAAJ8RCwThr3gKsr',
         config=Config(s3={'addressing_style': 'path'})
     )
+
+    # запускаем парсер
     run()

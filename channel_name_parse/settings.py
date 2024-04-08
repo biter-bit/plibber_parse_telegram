@@ -77,7 +77,7 @@ DOWNLOADER_MIDDLEWARES = {
 
 SELENIUM_DRIVER_NAME = "chrome"
 SELENIUM_DRIVER_EXECUTABLE_PATH = "./chromedriver"
-SELENIUM_DRIVER_ARGUMENTS = ['headless']
+SELENIUM_DRIVER_ARGUMENTS = ['start-maximized']
 
 # Enable or disable extensions
 # See https://docs.scrapy.org/en/latest/topics/extensions.html
