@@ -11,5 +11,5 @@ class ChannelNameParseItem(scrapy.Item):
     name_channel = scrapy.Field()
     channel_info = scrapy.Field()
     messages = scrapy.Field()
-    photo_byte = scrapy.Field()
-    file_path = scrapy.Field()
+    # photo_byte = scrapy.Field()
+    # file_path = scrapy.Field()
